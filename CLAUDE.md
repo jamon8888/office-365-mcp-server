@@ -41,6 +41,8 @@ npm run test:drive
 npm run test:planner
 npm run test:users
 npm run test:notifications
+npm run test:contacts
+npm run test:newsletter
 ```
 
 ## Architecture
@@ -50,7 +52,7 @@ npm run test:notifications
 The server is organized into isolated modules in `/[module]/index.js`, each exporting a `[module]Tools` array. Modules are:
 
 - **auth**: OAuth 2.0 flow, token management with auto-refresh
-- **email**: Unified email search with KQL support, attachment handling, SharePoint URL mapping
+- **email**: Unified email search with KQL support, attachment handling, SharePoint URL mapping, contact extraction with newsletter filtering
 - **calendar**: Full CRUD operations, Teams meeting integration, recurrence patterns
 - **teams**: Consolidated tools for meetings, channels, and chats
 - **contacts**: Full contact management with advanced search
@@ -58,7 +60,7 @@ The server is organized into isolated modules in `/[module]/index.js`, each expo
 - **files**: OneDrive/SharePoint operations with local path mapping
 - **search**: Unified Microsoft 365 search capabilities
 - **notifications**: Graph API change notifications/webhooks
-- **utils**: Shared utilities (Graph API client, batch operations, mock data)
+- **utils**: Shared utilities (Graph API client, batch operations, mock data, contact extraction, newsletter detection)
 
 ### Tool Registration Pattern
 
@@ -139,6 +141,60 @@ Email module uses a unified `email_search` tool that automatically routes querie
 - **Filter route**: Date-filtered queries → `/me/messages?$filter=receivedDateTime ge ...`
 - **Smart fallback**: Switches routes based on query patterns and date requirements
 
+### Contact Extraction and Newsletter Detection
+
+The email module includes sophisticated contact extraction with intelligent newsletter filtering.
+
+**Contact Extraction** (`tools/email-contact-extractor.js`):
+- Extracts contacts from email metadata (From, To, CC) and body content
+- Parses signatures, phone numbers, LinkedIn URLs, company names, job titles
+- Supports bilingual extraction (French and English patterns)
+- Cross-references with Outlook contacts to identify new contacts
+- Deduplicates contacts with confidence scoring
+- Exports to CSV with full contact information
+
+**Utility Modules**:
+- `utils/contact-parser.js`: Email, phone, LinkedIn extraction; name parsing; signature detection
+- `utils/html-processor.js`: HTML stripping, signature extraction, body processing
+- `utils/deduplicator.js`: Contact merging, deduplication, confidence scoring
+- `utils/csv-generator.js`: CSV generation with proper escaping
+- `utils/newsletter-detector.js`: Intelligent newsletter/marketing email detection
+
+**Newsletter Detection** (`utils/newsletter-detector.js`):
+- Multi-factor scoring system analyzing 14+ signals
+- Bilingual pattern detection (French and English)
+- Configurable via `/config/newsletter-rules.json` (whitelist, blacklist, custom patterns)
+- Performance optimized with LRU caching (max 1000 entries)
+- Default threshold: 60/100 (configurable)
+
+**Detection Signals**:
+- Headers: List-Unsubscribe, Precedence: bulk, ESP markers (Mailchimp, Sendgrid)
+- Sender patterns: noreply@, newsletter@, ne-pas-repondre@, marketing@, bulletin@
+- Body content: Unsubscribe links, "view in browser", preferences management
+- Structure: High image/text ratio, tracking pixels, table-based layouts
+- Recipients: BCC recipients, generic names ("Cher Client", "Valued Customer")
+
+**Configuration** (`config/newsletter-rules.json`):
+- Whitelist domains/senders (never filtered)
+- Blacklist domains/senders (always filtered)
+- Custom regex patterns for sender addresses and subject lines
+- Configurable threshold and cache settings
+
+**Integration Pattern**:
+```javascript
+const { detectNewsletter, applyWhitelistBlacklist } = require('../utils/newsletter-detector');
+
+// Filter newsletters before processing
+for (const email of emails) {
+  const detection = await detectNewsletter(email, threshold);
+  const finalDetection = applyWhitelistBlacklist(email, detection, rules);
+
+  if (!finalDetection.isNewsletter) {
+    // Process email for contact extraction
+  }
+}
+```
+
 ## Testing Strategy
 
 ### Test Mode
@@ -150,8 +206,23 @@ Set `USE_TEST_MODE=true` to use mock data from `utils/mock-data.js` without real
 - Mock token manager and Graph API in unit tests
 - Integration tests verify end-to-end tool execution
 
+**Key Test Files**:
+- `tests/contact-extraction.test.js`: Contact parsing, HTML processing, deduplication, CSV generation (42 tests)
+- `tests/newsletter-detector.test.js`: Newsletter detection patterns, bilingual support, whitelist/blacklist (43 tests)
+- Other module tests: auth, teams, drive, planner, users, notifications
+
 ### Running Specific Tests
 Each module has a dedicated test script (`npm run test:[module]`) for focused testing during development.
+
+### French Localization Testing
+The contact extraction and newsletter detection modules include comprehensive French language support:
+- French signature markers: Cordialement, Bien cordialement, Salutations, Amitiés
+- French phone formats: +33, 01-09 (landline), 06-07 (mobile)
+- French company types: SA, SARL, SAS, SASU, SNC
+- French job titles: PDG, DG, Directeur, Responsable, Ingénieur
+- French newsletter patterns: ne-pas-repondre@, désabonnement, bulletin@
+
+All bilingual patterns are tested in both French and English.
 
 ## Important Patterns
 
@@ -214,3 +285,25 @@ The `convertSharePointUrlToLocal()` function handles both organizational SharePo
 1. Test with real URLs from target environment
 2. Handle URL decoding for special characters
 3. Consider both Windows and Unix path formats
+
+### Extending Contact Extraction
+To add new extraction patterns or enhance existing ones:
+1. Update pattern regexes in `utils/contact-parser.js` for new formats
+2. Add corresponding tests in `tests/contact-extraction.test.js`
+3. For French patterns, ensure both accented and non-accented variants are matched
+4. Update confidence scoring in `utils/deduplicator.js` if adding new high-value fields
+
+### Customizing Newsletter Detection
+To adjust newsletter detection behavior:
+1. Modify signal weights in `NEWSLETTER_SIGNALS` object in `utils/newsletter-detector.js`
+2. Add new detection patterns to appropriate check functions (checkHeaders, checkSenderPatterns, etc.)
+3. Update `/config/newsletter-rules.json` for domain-specific whitelist/blacklist
+4. Add tests for new patterns in `tests/newsletter-detector.test.js`
+5. Adjust default threshold in config or per-call if needed
+
+### Adding Bilingual Support for Other Languages
+The contact extraction and newsletter detection modules use a bilingual pattern approach:
+1. Add new language patterns alongside existing French/English patterns
+2. Use non-capturing groups for language alternatives: `(?:English|French|NewLang)`
+3. Test all language variants independently
+4. Document supported languages in README.md and tool descriptions
