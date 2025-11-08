@@ -8,6 +8,9 @@ const { refreshAccessToken, needsRefresh } = require('./auto-refresh');
 // Global variable to store tokens
 let cachedTokens = null;
 
+// Debounce concurrent refresh requests
+let refreshPromise = null;
+
 /**
  * Loads authentication tokens from the token file
  * @returns {object|null} - The loaded tokens or null if not available
@@ -15,63 +18,33 @@ let cachedTokens = null;
 function loadTokenCache() {
   try {
     const tokenPath = config.AUTH_CONFIG.tokenStorePath;
-    console.error(`[DEBUG] Attempting to load tokens from: ${tokenPath}`);
-    console.error(`[DEBUG] HOME directory: ${process.env.HOME}`);
-    console.error(`[DEBUG] Full resolved path: ${tokenPath}`);
     
-    // Log file existence and details
+    // Quick existence check without stat
     if (!fs.existsSync(tokenPath)) {
-      console.error('[DEBUG] Token file does not exist');
+      console.error('[TOKEN-MANAGER] Token file does not exist');
       return null;
     }
     
-    const stats = fs.statSync(tokenPath);
-    console.error(`[DEBUG] Token file stats:
-      Size: ${stats.size} bytes
-      Created: ${stats.birthtime}
-      Modified: ${stats.mtime}`);
-    
     const tokenData = fs.readFileSync(tokenPath, 'utf8');
-    console.error('[DEBUG] Token file contents length:', tokenData.length);
-    console.error('[DEBUG] Token file first 200 characters:', tokenData.slice(0, 200));
     
     try {
       const tokens = JSON.parse(tokenData);
-      console.error('[DEBUG] Parsed tokens keys:', Object.keys(tokens));
-      
-      // Log each key's value to see what's present
-      Object.keys(tokens).forEach(key => {
-        console.error(`[DEBUG] ${key}: ${typeof tokens[key]}`);
-      });
       
       // Check for access token presence
       if (!tokens.access_token) {
-        console.error('[DEBUG] No access_token found in tokens');
+        console.error('[TOKEN-MANAGER] No access_token found in tokens');
         return null;
-      }
-      
-      // Check token expiration - but DON'T return null here!
-      // We need to return the tokens so the refresh logic can run
-      const now = Date.now();
-      const expiresAt = tokens.expires_at || 0;
-      
-      console.error(`[DEBUG] Current time: ${now}`);
-      console.error(`[DEBUG] Token expires at: ${expiresAt}`);
-      
-      if (now > expiresAt) {
-        console.error('[DEBUG] Token has expired - will need refresh');
-        // Still return the tokens so refresh can happen
       }
       
       // Update the cache
       cachedTokens = tokens;
       return tokens;
     } catch (parseError) {
-      console.error('[DEBUG] Error parsing token JSON:', parseError);
+      console.error('[TOKEN-MANAGER] Error parsing token JSON:', parseError.message);
       return null;
     }
   } catch (error) {
-    console.error('[DEBUG] Error loading token cache:', error);
+    console.error('[TOKEN-MANAGER] Error loading token cache:', error.message);
     return null;
   }
 }
@@ -108,12 +81,26 @@ async function getAccessToken(autoRefresh = true) {
   if (cachedTokens && cachedTokens.access_token) {
     if (autoRefresh && needsRefresh(cachedTokens)) {
       console.error('[TOKEN-MANAGER] Cached token needs refresh');
+      
+      // Debounce concurrent refresh requests
+      if (!refreshPromise) {
+        refreshPromise = refreshAccessToken()
+          .then(newTokens => {
+            cachedTokens = newTokens;
+            refreshPromise = null;
+            return newTokens;
+          })
+          .catch(error => {
+            console.error('[TOKEN-MANAGER] Auto-refresh failed:', error.message);
+            refreshPromise = null;
+            throw error;
+          });
+      }
+      
       try {
-        const newTokens = await refreshAccessToken();
-        cachedTokens = newTokens;
+        const newTokens = await refreshPromise;
         return newTokens.access_token;
       } catch (error) {
-        console.error('[TOKEN-MANAGER] Auto-refresh failed:', error.message);
         // Return existing token if refresh fails (might still work briefly)
         return cachedTokens.access_token;
       }
@@ -130,12 +117,26 @@ async function getAccessToken(autoRefresh = true) {
   // Check if refresh needed
   if (autoRefresh && needsRefresh(tokens)) {
     console.error('[TOKEN-MANAGER] Token needs refresh');
+    
+    // Debounce concurrent refresh requests
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken()
+        .then(newTokens => {
+          cachedTokens = newTokens;
+          refreshPromise = null;
+          return newTokens;
+        })
+        .catch(error => {
+          console.error('[TOKEN-MANAGER] Auto-refresh failed:', error.message);
+          refreshPromise = null;
+          throw error;
+        });
+    }
+    
     try {
-      const newTokens = await refreshAccessToken();
-      cachedTokens = newTokens;
+      const newTokens = await refreshPromise;
       return newTokens.access_token;
     } catch (error) {
-      console.error('[TOKEN-MANAGER] Auto-refresh failed:', error.message);
       // Return existing token if refresh fails
       return tokens.access_token;
     }

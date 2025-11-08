@@ -133,19 +133,47 @@ function cleanupOldAttachments() {
   
   files.forEach(file => {
     const filePath = path.join(tempDir, file);
-    const stats = fs.statSync(filePath);
-    const age = now - stats.mtimeMs;
-    
-    if (age > maxAge) {
-      try {
+    try {
+      const stats = fs.statSync(filePath);
+      const age = now - stats.mtimeMs;
+      
+      if (age > maxAge) {
         fs.unlinkSync(filePath);
         console.error(`Cleaned up old attachment: ${file}`);
-      } catch (err) {
-        console.error(`Failed to delete old attachment: ${file}`, err);
       }
+    } catch (err) {
+      console.error(`Failed to process attachment file: ${file}`, err.message);
     }
   });
 }
+
+// Schedule cleanup to run periodically instead of on every email read
+let cleanupInterval = null;
+function scheduleAttachmentCleanup() {
+  // Only schedule once
+  if (cleanupInterval) return;
+  
+  // Run cleanup every 6 hours
+  cleanupInterval = setInterval(() => {
+    try {
+      cleanupOldAttachments();
+    } catch (err) {
+      console.error('Error during scheduled attachment cleanup:', err.message);
+    }
+  }, 6 * 60 * 60 * 1000); // 6 hours
+  
+  // Also run once at startup
+  setTimeout(() => {
+    try {
+      cleanupOldAttachments();
+    } catch (err) {
+      console.error('Error during startup attachment cleanup:', err.message);
+    }
+  }, 5000); // 5 seconds after startup
+}
+
+// Initialize cleanup schedule
+scheduleAttachmentCleanup();
 
 /**
  * Unified email handler for list, read, and send operations
@@ -554,13 +582,6 @@ async function listEmails(accessToken, params) {
 async function readEmail(accessToken, params) {
   const { emailId } = params;
   
-  // Clean up old attachments periodically
-  try {
-    cleanupOldAttachments();
-  } catch (err) {
-    console.error('Error during attachment cleanup:', err);
-  }
-  
   if (!emailId) {
     return {
       content: [{ 
@@ -750,37 +771,20 @@ async function sendEmail(accessToken, params) {
 
 // ============== DRAFT EMAIL FUNCTIONS ==============
 
-async function createDraft(accessToken, params) {
-  try {
-    // Validate parameters
-    if (!params.subject && !params.body && !params.to) {
-      return {
-        content: [{ 
-          type: "text", 
-          text: "At least one parameter required: subject, body, or to" 
-        }]
-      };
-    }
-    
-    // Build draft message object
-    const draftMessage = {};
-    
-    if (params.subject) {
-      draftMessage.subject = params.subject;
-    }
-    
-    if (params.body) {
-      // Always use HTML content type for better formatting support
-      // Strip any CDATA wrappers if present
-      let bodyContent = params.body;
-      if (bodyContent.includes('<![CDATA[')) {
-        bodyContent = bodyContent.replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '');
-      }
-      
-      // Ensure proper HTML structure with professional font styling
-      if (!bodyContent.includes('<html>')) {
-        // Add HTML wrapper with professional font family
-        bodyContent = `<html>
+/**
+ * Process and format HTML body content for emails
+ * @param {string} bodyContent - Raw body content
+ * @returns {string} - Processed HTML body
+ */
+function processEmailBodyHTML(bodyContent) {
+  // Strip any CDATA wrappers if present
+  let processedBody = bodyContent;
+  if (processedBody.includes('<![CDATA[')) {
+    processedBody = processedBody.replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '');
+  }
+  
+  // Professional email styles
+  const emailStyles = `<html>
 <head>
 <style>
 body {
@@ -811,19 +815,46 @@ ul, ol {
 }
 </style>
 </head>
-<body>${bodyContent}</body>
+<body>${processedBody}</body>
 </html>`;
-      } else if (!bodyContent.includes('font-family') && !bodyContent.includes('Gulim')) {
-        // If HTML exists but no font specified, inject font style
-        bodyContent = bodyContent.replace('<body>', `<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, Arial, sans-serif; font-size: 11pt; color: #333333;">`);
-      }
-      
-      // Replace any Gulim font references with professional fonts
-      bodyContent = bodyContent.replace(/font-family:\s*["']?Gulim["']?[^;]*/gi, "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, Arial, sans-serif");
-      
+  
+  // Ensure proper HTML structure with professional font styling
+  if (!processedBody.includes('<html>')) {
+    processedBody = emailStyles;
+  } else if (!processedBody.includes('font-family') && !processedBody.includes('Gulim')) {
+    // If HTML exists but no font specified, inject font style
+    processedBody = processedBody.replace('<body>', `<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, Arial, sans-serif; font-size: 11pt; color: #333333;">`);
+  }
+  
+  // Replace any Gulim font references with professional fonts
+  processedBody = processedBody.replace(/font-family:\s*["']?Gulim["']?[^;]*/gi, "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, Arial, sans-serif");
+  
+  return processedBody;
+}
+
+async function createDraft(accessToken, params) {
+  try {
+    // Validate parameters
+    if (!params.subject && !params.body && !params.to) {
+      return {
+        content: [{ 
+          type: "text", 
+          text: "At least one parameter required: subject, body, or to" 
+        }]
+      };
+    }
+    
+    // Build draft message object
+    const draftMessage = {};
+    
+    if (params.subject) {
+      draftMessage.subject = params.subject;
+    }
+    
+    if (params.body) {
       draftMessage.body = {
         contentType: "HTML",
-        content: bodyContent
+        content: processEmailBodyHTML(params.body)
       };
     }
     
@@ -892,60 +923,9 @@ async function updateDraft(accessToken, params) {
     }
     
     if (updateParams.body) {
-      // Always use HTML content type for better formatting support
-      // Strip any CDATA wrappers if present
-      let bodyContent = updateParams.body;
-      if (bodyContent.includes('<![CDATA[')) {
-        bodyContent = bodyContent.replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '');
-      }
-      
-      // Ensure proper HTML structure with professional font styling
-      if (!bodyContent.includes('<html>')) {
-        // Add HTML wrapper with professional font family
-        bodyContent = `<html>
-<head>
-<style>
-body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, Arial, sans-serif;
-  font-size: 11pt;
-  color: #333333;
-}
-table {
-  border-collapse: collapse;
-  margin: 10px 0;
-}
-th, td {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: left;
-}
-th {
-  background-color: #f2f2f2;
-  font-weight: bold;
-}
-h3 {
-  color: #2c3e50;
-  margin-top: 15px;
-  margin-bottom: 10px;
-}
-ul, ol {
-  margin: 10px 0;
-}
-</style>
-</head>
-<body>${bodyContent}</body>
-</html>`;
-      } else if (!bodyContent.includes('font-family') && !bodyContent.includes('Gulim')) {
-        // If HTML exists but no font specified, inject font style
-        bodyContent = bodyContent.replace('<body>', `<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, Arial, sans-serif; font-size: 11pt; color: #333333;">`);
-      }
-      
-      // Replace any Gulim font references with professional fonts
-      bodyContent = bodyContent.replace(/font-family:\s*["']?Gulim["']?[^;]*/gi, "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, Arial, sans-serif");
-      
       updateMessage.body = {
         contentType: "HTML",
-        content: bodyContent
+        content: processEmailBodyHTML(updateParams.body)
       };
     }
     
@@ -1082,7 +1062,19 @@ async function listDrafts(accessToken, params) {
 /**
  * Convert folder name to folder ID
  */
+
+// Cache for folder name to ID mappings
+const folderIdCache = new Map();
+const FOLDER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 async function getFolderIdByName(accessToken, folderName) {
+  // Check cache first
+  const cacheKey = folderName.toLowerCase();
+  const cached = folderIdCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.id;
+  }
+  
   // Check well-known folder names first
   const wellKnownFolders = {
     'inbox': 'inbox',
@@ -1096,9 +1088,11 @@ async function getFolderIdByName(accessToken, folderName) {
     'archive': 'archive'
   };
   
-  const lowerName = folderName.toLowerCase();
-  if (wellKnownFolders[lowerName]) {
-    return wellKnownFolders[lowerName];
+  if (wellKnownFolders[cacheKey]) {
+    const id = wellKnownFolders[cacheKey];
+    // Cache well-known folders too
+    folderIdCache.set(cacheKey, { id, expiresAt: Date.now() + FOLDER_CACHE_TTL });
+    return id;
   }
   
   // Search for custom folder by name
@@ -1115,7 +1109,10 @@ async function getFolderIdByName(accessToken, folderName) {
     );
     
     if (response.value && response.value.length > 0) {
-      return response.value[0].id;
+      const id = response.value[0].id;
+      // Cache the result
+      folderIdCache.set(cacheKey, { id, expiresAt: Date.now() + FOLDER_CACHE_TTL });
+      return id;
     }
   } catch (error) {
     console.error(`Error finding folder by name: ${error.message}`);

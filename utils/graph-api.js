@@ -52,10 +52,17 @@ async function callGraphAPI(accessToken, method, path, data = null, queryParams 
   try {
     console.error(`Making real API call: ${method} ${path}`);
     
-    // Encode path segments properly
-    const encodedPath = path.split('/')
-      .map(segment => encodeURIComponent(segment))
-      .join('/');
+    // Encode path more efficiently - only encode if needed
+    let encodedPath = path;
+    if (path.includes(' ') || path.includes('%') || /[^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]/.test(path)) {
+      encodedPath = path.split('/')
+        .map(segment => {
+          // Skip encoding for already-encoded segments or empty segments
+          if (!segment || segment.includes('%')) return segment;
+          return encodeURIComponent(segment);
+        })
+        .join('/');
+    }
     
     // Build query string from parameters with special handling for OData filters
     let queryString = '';

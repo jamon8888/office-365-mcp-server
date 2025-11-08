@@ -12,46 +12,74 @@ class BatchRequestManager {
   }
 
   /**
-   * Execute batch requests with automatic chunking
+   * Execute batch requests with automatic chunking and optional parallel execution
    * @param {Array} requests - Array of request objects
    * @param {string} accessToken - Access token for authentication
+   * @param {boolean} parallel - Execute chunks in parallel (default: false for safety)
    * @returns {Array} Array of responses from all batches
    */
-  async executeBatch(requests, accessToken) {
+  async executeBatch(requests, accessToken, parallel = false) {
     if (!requests || requests.length === 0) {
       return [];
     }
 
     const chunks = this.chunkRequests(requests);
-    const results = [];
     
-    for (const chunk of chunks) {
-      try {
-        const batchResponse = await callGraphAPI(
-          accessToken,
-          'POST',
-          '$batch',
-          { requests: chunk }
-        );
-        
-        // Extract responses from batch response
-        if (batchResponse && batchResponse.responses) {
-          results.push(...batchResponse.responses);
+    if (parallel && chunks.length > 1) {
+      // Execute chunks in parallel for better performance
+      const results = await Promise.allSettled(
+        chunks.map(chunk => this.executeSingleBatch(chunk, accessToken))
+      );
+      
+      // Flatten results and handle errors
+      return results.flatMap(result => {
+        if (result.status === 'fulfilled') {
+          return result.value;
+        } else {
+          console.error('Parallel batch request failed:', result.reason);
+          return [];
         }
-      } catch (error) {
-        console.error('Batch request failed:', error);
-        // Add error responses for failed batch
-        chunk.forEach(req => {
-          results.push({
-            id: req.id,
-            status: 500,
-            body: { error: { message: 'Batch request failed', details: error.message } }
-          });
-        });
+      });
+    } else {
+      // Sequential execution (safer default)
+      const results = [];
+      for (const chunk of chunks) {
+        const chunkResults = await this.executeSingleBatch(chunk, accessToken);
+        results.push(...chunkResults);
       }
+      return results;
     }
-    
-    return results;
+  }
+
+  /**
+   * Execute a single batch request
+   * @param {Array} chunk - Array of requests for this batch
+   * @param {string} accessToken - Access token for authentication
+   * @returns {Array} Array of responses from the batch
+   */
+  async executeSingleBatch(chunk, accessToken) {
+    try {
+      const batchResponse = await callGraphAPI(
+        accessToken,
+        'POST',
+        '$batch',
+        { requests: chunk }
+      );
+      
+      // Extract responses from batch response
+      if (batchResponse && batchResponse.responses) {
+        return batchResponse.responses;
+      }
+      return [];
+    } catch (error) {
+      console.error('Batch request failed:', error);
+      // Add error responses for failed batch
+      return chunk.map(req => ({
+        id: req.id,
+        status: 500,
+        body: { error: { message: 'Batch request failed', details: error.message } }
+      }));
+    }
   }
 
   /**
