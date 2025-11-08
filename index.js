@@ -50,15 +50,25 @@ const TOOLS = [
   // ...adminTools
 ];
 
+// Cache tool capabilities to avoid rebuilding on every request
+const TOOLS_CAPABILITIES = TOOLS.reduce((acc, tool) => {
+  acc[tool.name] = {};
+  return acc;
+}, {});
+
+// Cache tool list response
+const TOOLS_LIST_RESPONSE = TOOLS.map(tool => ({
+  name: tool.name,
+  description: tool.description,
+  inputSchema: tool.inputSchema
+}));
+
 // Create server with tools capabilities
 const server = new Server(
   { name: config.SERVER_NAME, version: config.SERVER_VERSION },
   { 
     capabilities: { 
-      tools: TOOLS.reduce((acc, tool) => {
-        acc[tool.name] = {};
-        return acc;
-      }, {})
+      tools: TOOLS_CAPABILITIES
     } 
   }
 );
@@ -75,10 +85,7 @@ server.fallbackRequestHandler = async (request) => {
       return {
         protocolVersion: "2024-11-05",
         capabilities: { 
-          tools: TOOLS.reduce((acc, tool) => {
-            acc[tool.name] = {};
-            return acc;
-          }, {})
+          tools: TOOLS_CAPABILITIES
         },
         serverInfo: { name: config.SERVER_NAME, version: config.SERVER_VERSION }
       };
@@ -91,11 +98,7 @@ server.fallbackRequestHandler = async (request) => {
       console.error(`TOOLS NAMES: ${TOOLS.map(t => t.name).join(', ')}`);
       
       return {
-        tools: TOOLS.map(tool => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema
-        }))
+        tools: TOOLS_LIST_RESPONSE
       };
     }
     
