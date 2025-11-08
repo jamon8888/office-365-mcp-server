@@ -79,7 +79,7 @@ npm run auth-server
 
 ### Gestion de Fichiers
 - **Intégration SharePoint** : Mappage des chemins de synchronisation locaux
-- **Support OneDrive** : Opérations de fichiers complètes
+- **Prise en charge de OneDrive** : Opérations de fichiers complètes
 - **Opérations par Lots** : Télécharger/téléverser plusieurs fichiers
 - **Recherche** : Recherche de contenu et de métadonnées
 
