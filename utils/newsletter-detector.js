@@ -313,16 +313,17 @@ function checkRecipientPatterns(toRecipients, ccRecipients, bccRecipients, signa
  * Analyze email HTML structure
  * @param {string} htmlContent - HTML body content
  * @param {Array} signals - Signal array to populate
+ * @param {number} [tableLayoutThreshold=5] - Threshold for table-based layout detection
  * @returns {number} - Score contribution
  */
-function checkEmailStructure(htmlContent, signals) {
+function checkEmailStructure(htmlContent, signals, tableLayoutThreshold = 5) {
   let score = 0;
 
   if (!htmlContent) return score;
 
   // Count tables (newsletters often use table-based layouts)
   const tableCount = (htmlContent.match(/<table/gi) || []).length;
-  if (tableCount > 5) {
+  if (tableCount > tableLayoutThreshold) {
     signals.push('table-layout');
     score += NEWSLETTER_SIGNALS.tableBasedLayout;
   }

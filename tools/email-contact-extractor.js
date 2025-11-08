@@ -408,7 +408,7 @@ async function extractContactsFromEmails(args) {
       }
 
       processedEmails = emailsToProcess;
-      console.error(`Filtered ${newsletterStats.totalNewsletters} newsletters, processing ${processedEmails.length} emails`);
+      console.info(`Filtered ${newsletterStats.totalNewsletters} newsletters, processing ${processedEmails.length} emails`);
     }
 
     // Extract contacts from all emails
