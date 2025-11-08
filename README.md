@@ -100,7 +100,7 @@ npm run auth-server
 - **Analyse Intelligente** : Extraction automatique des informations de contact depuis les métadonnées et le contenu des emails
 - **Extraction de Données Riches** : Capture des noms, emails, numéros de téléphone, URLs LinkedIn, noms d'entreprise et titres de poste
 - **Détection de Signature** : Détection et analyse intelligente des signatures d'email (français et anglais)
-- **Déduplication** : Fusion automatique des contacts en double avec scoring de confidence
+- **Déduplication** : Fusion automatique des contacts en double avec scoring de confiance
 - **Filtrage des Newsletters** : Détection et exclusion automatique des emails marketing/bulk avec analyse multi-facteurs (en-têtes, expéditeur, contenu)
 - **Référence Croisée Outlook** : Identifier les nouveaux contacts non présents dans vos contacts Outlook
 - **Export CSV** : Exporter tous les contacts extraits vers un fichier CSV pour un import facile
