@@ -19,7 +19,30 @@ const {
   writeContactsToCSV,
   getDefaultCSVPath
 } = require('../utils/csv-generator');
+const {
+  detectNewsletter,
+  applyWhitelistBlacklist
+} = require('../utils/newsletter-detector');
 const config = require('../config');
+const fs = require('fs');
+const path = require('path');
+
+/**
+ * Load newsletter filtering rules
+ * @returns {Object|null} - Newsletter rules or null if file doesn't exist
+ */
+function loadNewsletterRules() {
+  try {
+    const rulesPath = path.join(__dirname, '../config/newsletter-rules.json');
+    if (fs.existsSync(rulesPath)) {
+      const content = fs.readFileSync(rulesPath, 'utf8');
+      return JSON.parse(content);
+    }
+  } catch (error) {
+    console.error('Error loading newsletter rules:', error.message);
+  }
+  return null;
+}
 
 /**
  * Parse date filter (supports ISO format or relative like "30d", "1w", "1m", "1y")
@@ -320,7 +343,10 @@ async function extractContactsFromEmails(args) {
     includeBody = true,
     outputPath = null,
     startDate = null,
-    endDate = null
+    endDate = null,
+    excludeNewsletters = true,
+    newsletterThreshold = 60,
+    saveNewsletterReport = false
   } = args;
 
   try {
@@ -348,11 +374,48 @@ async function extractContactsFromEmails(args) {
       };
     }
 
+    // Filter newsletters if requested
+    let processedEmails = emails;
+    const newsletterStats = {
+      totalNewsletters: 0,
+      filteredNewsletters: []
+    };
+
+    if (excludeNewsletters) {
+      console.error('Filtering newsletters...');
+      const rules = loadNewsletterRules();
+      const emailsToProcess = [];
+
+      for (const email of emails) {
+        const detection = await detectNewsletter(email, newsletterThreshold);
+        const finalDetection = applyWhitelistBlacklist(email, detection, rules);
+
+        if (finalDetection.isNewsletter) {
+          newsletterStats.totalNewsletters++;
+          if (saveNewsletterReport) {
+            newsletterStats.filteredNewsletters.push({
+              from: email.from?.emailAddress?.address || 'unknown',
+              subject: email.subject || 'no subject',
+              receivedDateTime: email.receivedDateTime,
+              confidence: finalDetection.confidence,
+              signals: finalDetection.signals,
+              reason: finalDetection.reason
+            });
+          }
+        } else {
+          emailsToProcess.push(email);
+        }
+      }
+
+      processedEmails = emailsToProcess;
+      console.info(`Filtered ${newsletterStats.totalNewsletters} newsletters, processing ${processedEmails.length} emails`);
+    }
+
     // Extract contacts from all emails
     let allContacts = [];
-    emails.forEach((email, index) => {
+    processedEmails.forEach((email, index) => {
       if (index % 100 === 0) {
-        console.error(`Processing email ${index + 1}/${emails.length}`);
+        console.error(`Processing email ${index + 1}/${processedEmails.length}`);
       }
 
       const emailContacts = extractContactsFromEmail(email, includeBody);
@@ -397,10 +460,21 @@ async function extractContactsFromEmails(args) {
     console.error(`CSV written to: ${absolutePath}`);
 
     // Build result message
-    const resultText = `Contact extraction completed successfully!
+    let resultText = `Contact extraction completed successfully!
 
 📊 **Summary:**
-- Total emails processed: ${emails.length}
+- Total emails fetched: ${emails.length}`;
+
+    if (excludeNewsletters) {
+      resultText += `
+- Newsletters filtered: ${newsletterStats.totalNewsletters}
+- Emails processed for contacts: ${processedEmails.length}`;
+    } else {
+      resultText += `
+- Total emails processed: ${emails.length}`;
+    }
+
+    resultText += `
 - Unique contacts found: ${deduplicated.length}
 - New contacts (not in Outlook): ${newContacts.length}
 - Contacts with LinkedIn: ${stats.emailsWithLinkedIn}
@@ -414,6 +488,25 @@ The CSV file contains all extracted contacts with the following fields:
 - phoneNumbers, linkedInUrls
 - companyName, jobTitle
 - source, isInOutlook, firstSeenDate, extractionConfidence`;
+
+    // Save newsletter report if requested
+    if (saveNewsletterReport && newsletterStats.filteredNewsletters.length > 0) {
+      const reportPath = outputPath ?
+        outputPath.replace('.csv', '_newsletters.json') :
+        getDefaultCSVPath().replace('.csv', '_newsletters.json');
+
+      try {
+        fs.writeFileSync(reportPath, JSON.stringify({
+          totalFiltered: newsletterStats.totalNewsletters,
+          threshold: newsletterThreshold,
+          newsletters: newsletterStats.filteredNewsletters
+        }, null, 2), 'utf8');
+
+        resultText += `\n\n📋 **Newsletter report saved to:** ${reportPath}`;
+      } catch (error) {
+        console.error('Error saving newsletter report:', error);
+      }
+    }
 
     return {
       content: [{

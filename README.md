@@ -101,6 +101,7 @@ npm run auth-server
 - **Extraction de Données Riches** : Capture des noms, emails, numéros de téléphone, URLs LinkedIn, noms d'entreprise et titres de poste
 - **Détection de Signature** : Détection et analyse intelligente des signatures d'email (français et anglais)
 - **Déduplication** : Fusion automatique des contacts en double avec scoring de confiance
+- **Filtrage des Newsletters** : Détection et exclusion automatique des emails marketing/bulk avec analyse multi-facteurs (en-têtes, expéditeur, contenu)
 - **Référence Croisée Outlook** : Identifier les nouveaux contacts non présents dans vos contacts Outlook
 - **Export CSV** : Exporter tous les contacts extraits vers un fichier CSV pour un import facile
 - **Filtrage Flexible** : Filtrer par plage de dates, requête de recherche ou dossiers spécifiques
@@ -123,6 +124,46 @@ Extraire tous les contacts de mes emails de la boîte de réception des 30 derni
 - Téléphones : +33 X XX XX XX XX, 01.XX.XX.XX.XX, 06 XX XX XX XX
 - Entreprises : SA, SARL, SAS, SASU, SNC, Société
 - Titres : PDG, DG, Directeur, Responsable, Ingénieur, etc.
+
+**Filtrage Intelligent des Newsletters :**
+
+Le système inclut un détecteur de newsletters sophistiqué qui filtre automatiquement les emails marketing et bulk pour extraire uniquement les contacts professionnels pertinents.
+
+**Signaux de Détection (Bilingue Français/Anglais) :**
+- **En-têtes** : List-Unsubscribe, Precedence: bulk, ESP (Mailchimp, Sendgrid, etc.)
+- **Expéditeur** : noreply@, newsletter@, ne-pas-repondre@, marketing@, bulletin@
+- **Contenu** : Liens de désabonnement, "Afficher dans le navigateur", préférences email
+- **Structure** : Ratio images/texte élevé, pixels de tracking, mises en page en tableaux
+- **Destinataires** : BCC, noms génériques ("Cher Client", "Valued Customer")
+
+**Configuration Personnalisée :**
+
+Modifiez `/config/newsletter-rules.json` pour ajuster le filtrage :
+```json
+{
+  "whitelist": {
+    "domains": ["partenaire-important.com"],
+    "senders": ["newsletter-utile@entreprise.com"]
+  },
+  "blacklist": {
+    "domains": ["spam-company.com"],
+    "senders": ["promo@publicite.com"]
+  },
+  "settings": {
+    "defaultThreshold": 60
+  }
+}
+```
+
+**Paramètres de l'Outil :**
+- `excludeNewsletters` : Activer/désactiver le filtrage (défaut: true)
+- `newsletterThreshold` : Seuil de confiance 0-100 (défaut: 60, plus élevé = filtrage plus strict)
+- `saveNewsletterReport` : Enregistrer un rapport JSON des newsletters filtrées (défaut: false)
+
+**Exemple d'Utilisation :**
+```
+Extraire les contacts des 90 derniers jours, exclure les newsletters avec un seuil de 70, et sauvegarder le rapport
+```
 
 ## Enregistrement et Configuration de l'Application Azure
 
