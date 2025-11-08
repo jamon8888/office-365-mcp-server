@@ -102,7 +102,7 @@ npm run auth-server
 - **Détection de Signature** : Détection et analyse intelligente des signatures d'email (français et anglais)
 - **Déduplication** : Fusion automatique des contacts en double avec scoring de confiance
 - **Référence Croisée Outlook** : Identifier les nouveaux contacts non présents dans vos contacts Outlook
-- **Export CSV** : Exporter tous les contacts extraits vers un fichier CSV pour import facile
+- **Export CSV** : Exporter tous les contacts extraits vers un fichier CSV pour un import facile
 - **Filtrage Flexible** : Filtrer par plage de dates, requête de recherche ou dossiers spécifiques
 - **Traitement par Lots** : Traiter des milliers d'emails efficacement avec suivi de progression
 - **Support Multilingue** : Reconnaissance des signatures en français et anglais, numéros de téléphone français (+33, 01 XX XX XX XX)
