@@ -1174,62 +1174,58 @@ function buildKQLQuery(params) {
 
 /**
  * Check if query contains KQL operators
+ * Optimized with early returns and reduced allocations
  */
 function isKQLFormat(query) {
-  // Check for KQL operators
-  const kqlOperators = [
-    ':',      // Property separator
-    ' AND ',  // Boolean AND
-    ' OR ',   // Boolean OR
-    ' NOT ',  // Boolean NOT
-    'from:',
-    'to:',
-    'subject:',
-    'body:',
-    'hasattachment:',
-    'isread:',
-    'importance:',
-    'received:'
-  ];
-
-  // Also check for OR/AND/NOT at the beginning of the query
-  const kqlPatterns = [
-    /^OR\s+/i,    // OR at start
-    /^AND\s+/i,   // AND at start
-    /^NOT\s+/i,   // NOT at start
-    /\sOR\s+/i,   // OR with spaces
-    /\sAND\s+/i,  // AND with spaces
-    /\sNOT\s+/i   // NOT with spaces
-  ];
-
-  return kqlOperators.some(op => query.includes(op)) ||
-         kqlPatterns.some(pattern => pattern.test(query));
+  // Quick checks first (most common cases)
+  if (query.includes(':')) return true;
+  if (query.includes(' AND ') || query.includes(' OR ') || query.includes(' NOT ')) return true;
+  
+  // Check for operators at start (less common)
+  if (/^(OR|AND|NOT)\s+/i.test(query)) return true;
+  
+  return false;
 }
 
 /**
  * Check if query is complex enough to warrant Microsoft Search API
+ * Optimized to avoid multiple regex operations
  */
 function isComplexKQLQuery(query) {
-  // Complex queries have multiple operators or date ranges
-  const operatorCount = (query.match(/ AND | OR | NOT /g) || []).length;
-  const hasDateRange = query.includes('received>=') || query.includes('received<=');
-  const hasMultipleFilters = (query.match(/:/g) || []).length > 2;
+  // Quick checks that avoid regex
+  if (query.includes('received>=') || query.includes('received<=')) return true;
   
-  return operatorCount > 1 || hasDateRange || hasMultipleFilters;
+  // Count operators (only if not already complex)
+  const operatorCount = (query.match(/ AND | OR | NOT /g) || []).length;
+  if (operatorCount > 1) return true;
+  
+  // Count colons (only if not already complex)
+  const colonCount = (query.match(/:/g) || []).length;
+  return colonCount > 2;
 }
 
 /**
  * Parse relative date strings like '7d', '1w', '1m', '1y'
+ * Cached to avoid recalculating same relative dates
  */
+const dateCache = new Map();
+const DATE_CACHE_MAX_SIZE = 50;
+
 function parseRelativeDate(dateStr) {
   // If already ISO format, return as-is
   if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
     return dateStr;
   }
   
+  // Check cache for relative dates
+  const cached = dateCache.get(dateStr);
+  if (cached && Date.now() - cached.timestamp < 60000) { // Cache for 1 minute
+    return cached.value;
+  }
+  
   // Handle relative dates
   if (dateStr.match(/^\d+[dwmy]$/)) {
-    const num = parseInt(dateStr);
+    const num = parseInt(dateStr, 10);
     const unit = dateStr.slice(-1);
     const date = new Date();
     
@@ -1248,7 +1244,17 @@ function parseRelativeDate(dateStr) {
         break;
     }
     
-    return date.toISOString().split('T')[0];
+    const result = date.toISOString().split('T')[0];
+    
+    // Cache the result
+    if (dateCache.size >= DATE_CACHE_MAX_SIZE) {
+      // Clear oldest entry
+      const firstKey = dateCache.keys().next().value;
+      dateCache.delete(firstKey);
+    }
+    dateCache.set(dateStr, { value: result, timestamp: Date.now() });
+    
+    return result;
   }
   
   return dateStr;
