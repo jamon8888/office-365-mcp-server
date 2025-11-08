@@ -32,15 +32,16 @@ function stripHtml(html) {
 }
 
 /**
- * Extract signature block from email body
+ * Extract signature block from email body (English and French)
  * @param {string} bodyText - Plain text email body
  * @returns {string|null} - Signature text or null
  */
 function extractSignature(bodyText) {
   if (!bodyText) return null;
 
-  // Common signature indicators
+  // Common signature indicators (English and French)
   const signatureMarkers = [
+    // English
     'Best regards',
     'Regards',
     'Sincerely',
@@ -48,9 +49,21 @@ function extractSignature(bodyText) {
     'Cheers',
     'Best',
     'Thank you',
+    // French
+    'Cordialement',
+    'Bien cordialement',
+    'Salutations',
+    'Salutations distinguées',
+    'Respectueusement',
+    'Amitiés',
+    'Amicalement',
+    'Bonne journée',
+    'Bonne soirée',
+    // Common
     '--',
     '___',
-    'Sent from'
+    'Sent from',
+    'Envoyé depuis'
   ];
 
   // Find the last occurrence of any signature marker
@@ -119,7 +132,7 @@ function cleanText(text) {
 }
 
 /**
- * Check if email body likely contains a signature
+ * Check if email body likely contains a signature (English and French)
  * @param {string} bodyText - Plain text body
  * @returns {boolean} - True if signature markers found
  */
@@ -127,11 +140,23 @@ function hasSignature(bodyText) {
   if (!bodyText) return false;
 
   const signatureMarkers = [
+    // English
     /best regards?/i,
     /sincerely/i,
     /thanks?/i,
     /cheers/i,
     /sent from/i,
+    // French
+    /cordialement/i,
+    /bien cordialement/i,
+    /salutations/i,
+    /respectueusement/i,
+    /amitiés/i,
+    /amicalement/i,
+    /bonne journée/i,
+    /bonne soirée/i,
+    /envoyé depuis/i,
+    // Common
     /\n--\n/,
     /\n___+\n/
   ];

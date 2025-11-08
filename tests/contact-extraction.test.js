@@ -76,6 +76,18 @@ describe('Contact Parser', () => {
       const phones = extractPhoneNumbers(text);
       expect(phones.length).toBeGreaterThan(0);
     });
+
+    it('should extract French phone numbers', () => {
+      const text = 'Appelez-moi au +33 1 23 45 67 89 ou 06.12.34.56.78';
+      const phones = extractPhoneNumbers(text);
+      expect(phones.length).toBeGreaterThan(0);
+    });
+
+    it('should extract French mobile numbers', () => {
+      const text = 'Mobile: 06 12 34 56 78';
+      const phones = extractPhoneNumbers(text);
+      expect(phones.length).toBeGreaterThan(0);
+    });
   });
 
   describe('extractLinkedInUrls', () => {
@@ -159,6 +171,13 @@ describe('HTML Processor', () => {
       expect(signature).toContain('John Doe');
     });
 
+    it('should extract French signature from text', () => {
+      const body = 'Contenu de l\'email ici.\n\nCordialement,\nJean Dupont\nDirecteur, Société Exemple';
+      const signature = extractSignature(body);
+      expect(signature).toContain('Cordialement');
+      expect(signature).toContain('Jean Dupont');
+    });
+
     it('should return null for short emails without signature marker', () => {
       const body = 'Just a simple email with no signature';
       const signature = extractSignature(body);
@@ -176,6 +195,16 @@ describe('HTML Processor', () => {
   describe('hasSignature', () => {
     it('should detect signature markers', () => {
       const body = 'Email content\n\nBest regards,\nJohn';
+      expect(hasSignature(body)).toBe(true);
+    });
+
+    it('should detect French signature markers', () => {
+      const body = 'Contenu de l\'email\n\nCordialement,\nJean';
+      expect(hasSignature(body)).toBe(true);
+    });
+
+    it('should detect Bien cordialement', () => {
+      const body = 'Message\n\nBien cordialement,\nMarie';
       expect(hasSignature(body)).toBe(true);
     });
 

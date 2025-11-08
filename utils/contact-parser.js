@@ -31,7 +31,7 @@ function extractEmails(text) {
 }
 
 /**
- * Extract phone numbers from text (multiple formats)
+ * Extract phone numbers from text (multiple formats including French)
  * @param {string} text - Text to parse
  * @returns {Array<string>} - Array of phone numbers
  */
@@ -41,7 +41,9 @@ function extractPhoneNumbers(text) {
   const phonePatterns = [
     // US formats: (123) 456-7890, 123-456-7890, 123.456.7890
     /\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g,
-    // International: +1-234-567-8900, +44 20 1234 5678
+    // French formats: +33 1 23 45 67 89, 01 23 45 67 89, 06.12.34.56.78
+    /(?:\+33|0)[1-9](?:[\s.-]?\d{2}){4}/g,
+    // International: +1-234-567-8900, +44 20 1234 5678, +41 XX XXX XX XX
     /\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{1,4}[\s.-]?\d{1,9}/g,
     // Simple: 1234567890 (10 digits)
     /\b\d{10}\b/g
@@ -54,8 +56,8 @@ function extractPhoneNumbers(text) {
     matches.forEach(num => {
       // Clean up the number
       const cleaned = num.replace(/[\s.-]/g, '');
-      // Only include if it has at least 10 digits
-      if (cleaned.length >= 10) {
+      // Only include if it has at least 9 digits (French mobile: 10 digits, some international: 9+)
+      if (cleaned.length >= 9) {
         numbers.add(num.trim());
       }
     });
@@ -85,21 +87,23 @@ function extractLinkedInUrls(text) {
 }
 
 /**
- * Extract names from signature blocks
+ * Extract names from signature blocks (English and French)
  * @param {string} signatureText - Signature text
  * @returns {string|null} - Extracted name or null
  */
 function extractNameFromSignature(signatureText) {
   if (!signatureText) return null;
 
-  // Common signature patterns
+  // Common signature patterns (English and French)
   const patterns = [
-    // "Best regards,\nJohn Doe"
-    /(?:best regards?|regards?|sincerely|thanks?|cheers),?\s*\n\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
-    // "John Doe\nCEO"
-    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*\n/m,
-    // First line with capitalized words
-    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)$/m
+    // English: "Best regards,\nJohn Doe"
+    /(?:best regards?|regards?|sincerely|thanks?|cheers),?\s*\n\s*([A-Z][a-zà-ÿ]+(?:\s+[A-Z][a-zà-ÿ]+)+)/i,
+    // French: "Cordialement,\nJean Dupont"
+    /(?:cordialement|bien cordialement|salutations|amitiés|amicalement),?\s*\n\s*([A-Z][a-zà-ÿ]+(?:\s+[A-Z][a-zà-ÿ]+)+)/i,
+    // "John Doe\nCEO" or "Jean Dupont\nDirecteur"
+    /^([A-Z][a-zà-ÿ]+(?:\s+[A-Z][a-zà-ÿ]+)+)\s*\n/m,
+    // First line with capitalized words (supports French accents)
+    /^([A-Z][a-zà-ÿ]+(?:\s+[A-Z][a-zà-ÿ]+)+)$/m
   ];
 
   for (const pattern of patterns) {
@@ -118,7 +122,7 @@ function extractNameFromSignature(signatureText) {
 }
 
 /**
- * Extract company name from text
+ * Extract company name from text (English and French)
  * @param {string} text - Text to parse
  * @returns {string|null} - Company name or null
  */
@@ -126,10 +130,12 @@ function extractCompanyName(text) {
   if (!text) return null;
 
   const patterns = [
-    // "CEO at Company Name"
-    /(?:CEO|CTO|CFO|Manager|Director|President|Founder)\s+at\s+([A-Z][A-Za-z\s&,.-]+(?:Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Corporation|Company)?)/i,
-    // "Company Name\nJob Title"
-    /^([A-Z][A-Za-z\s&,.-]+(?:Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Corporation))\s*\n/m
+    // English: "CEO at Company Name"
+    /(?:CEO|CTO|CFO|Manager|Director|President|Founder)\s+(?:at|chez)\s+([A-Z][A-Za-zà-ÿ\s&,.-]+(?:Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Corporation|Company)?)/i,
+    // French: "Directeur chez Société Name"
+    /(?:Directeur|Responsable|Gérant|PDG|DG|Fondateur)\s+(?:at|chez)\s+([A-Z][A-Za-zà-ÿ\s&,.-]+(?:SA\.?|SARL\.?|SAS\.?|SASU\.?|SNC\.?|SCS\.?|Société)?)/i,
+    // Company Name with French suffixes
+    /^([A-Z][A-Za-zà-ÿ\s&,.-]+(?:SA\.?|SARL\.?|SAS\.?|SASU\.?|SNC\.?|SCS\.?|Inc\.?|LLC\.?|Ltd\.?|Corp\.?|Corporation))\s*\n/m
   ];
 
   for (const pattern of patterns) {
@@ -146,7 +152,7 @@ function extractCompanyName(text) {
 }
 
 /**
- * Extract job title from text
+ * Extract job title from text (English and French)
  * @param {string} text - Text to parse
  * @returns {string|null} - Job title or null
  */
@@ -154,11 +160,19 @@ function extractJobTitle(text) {
   if (!text) return null;
 
   const commonTitles = [
+    // English titles
     'CEO', 'CTO', 'CFO', 'COO', 'President', 'Vice President', 'VP',
     'Director', 'Manager', 'Senior Manager', 'Lead', 'Senior',
     'Engineer', 'Developer', 'Designer', 'Architect', 'Consultant',
     'Analyst', 'Specialist', 'Coordinator', 'Administrator',
-    'Founder', 'Co-Founder', 'Partner', 'Associate', 'Assistant'
+    'Founder', 'Co-Founder', 'Partner', 'Associate', 'Assistant',
+    // French titles
+    'PDG', 'DG', 'Directeur', 'Directrice', 'Responsable',
+    'Chef', 'Gérant', 'Gérante', 'Fondateur', 'Fondatrice',
+    'Ingénieur', 'Ingénieure', 'Développeur', 'Développeuse',
+    'Consultant', 'Consultante', 'Analyste', 'Architecte',
+    'Coordinateur', 'Coordinatrice', 'Administrateur', 'Administratrice',
+    'Spécialiste', 'Associé', 'Associée', 'Assistant', 'Assistante'
   ];
 
   // Create regex pattern from common titles
