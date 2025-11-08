@@ -59,7 +59,6 @@ npm run auth-server
 
 ### Email Operations
 - **Unified Search**: Single `email_search` tool with automatic optimization
-- **Contact Extraction**: Extract contacts from emails with LinkedIn URLs, phone numbers, and company info
 - **Attachment Handling**: Download embedded attachments, map SharePoint URLs to local paths
 - **Advanced Features**: Categories, rules, focused inbox, folder management
 - **Batch Operations**: Move multiple emails efficiently
@@ -95,27 +94,6 @@ npm run auth-server
 - **Task Assignment**: User lookup and assignment
 - **Bucket Organization**: Group tasks efficiently
 - **Bulk Operations**: Update/delete multiple tasks
-
-### Contact Extraction from Emails
-- **Intelligent Parsing**: Automatically extract contact information from email metadata and body content
-- **Rich Data Extraction**: Capture names, emails, phone numbers, LinkedIn URLs, company names, and job titles
-- **Signature Detection**: Smart detection and parsing of email signatures
-- **Deduplication**: Automatic merging of duplicate contacts with confidence scoring
-- **Outlook Cross-Reference**: Identify new contacts not already in your Outlook contacts
-- **CSV Export**: Export all extracted contacts to a CSV file for easy import
-- **Flexible Filtering**: Filter by date range, search query, or specific folders
-- **Batch Processing**: Process thousands of emails efficiently with progress tracking
-
-**Usage Example:**
-```
-Extract all contacts from my inbox emails in the last 30 days and save to CSV
-```
-
-**CSV Output Format:**
-- email, displayName, firstName, lastName
-- phoneNumbers, linkedInUrls
-- companyName, jobTitle
-- source (metadata/signature/body), isInOutlook, firstSeenDate, extractionConfidence
 
 ## Azure App Registration & Configuration
 
